@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ニャッ！- 猫リズムゲーム</title>
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#ff8c42">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="ニャッ！">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #1a0a08;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: 'Arial', sans-serif;
+      overflow: hidden;
+      touch-action: manipulation;
+      user-select: none;
+    }
+
+    /* 暖かい背景グラデーション */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background: radial-gradient(ellipse at 50% 30%, rgba(255,100,30,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    #game-container {
+      width: 100%;
+      max-width: 420px;
+      height: 100vh;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── Score ── */
+    #score-area {
+      position: absolute;
+      top: 44px;
+      text-align: center;
+      width: 100%;
+    }
+    #combo-display {
+      font-size: 20px;
+      font-weight: bold;
+      min-height: 26px;
+      letter-spacing: 2px;
+    }
+    #score {
+      font-size: 72px;
+      font-weight: bold;
+      color: #fff;
+      text-shadow: 0 0 24px rgba(255,140,66,0.5);
+      line-height: 1;
+    }
+    #pts-popup {
+      font-size: 20px;
+      color: #ffd700;
+      min-height: 24px;
+      letter-spacing: 1px;
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+
+    /* ── Zone indicator ── */
+    #zone-bar-wrap {
+      position: absolute;
+      top: 22px;
+      right: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 3px;
+    }
+    #zone-label { font-size: 10px; color: #4a3028; letter-spacing: 2px; }
+    #zone-bar-bg {
+      width: 60px; height: 6px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    #zone-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, #ff3355, #ffd700, #ff8c42);
+      transition: width 0.4s ease;
+    }
+
+    /* ── Track ── */
+    #track-wrap { width: 88%; position: relative; }
+    #track {
+      width: 100%; height: 80px;
+      background: rgba(255,140,66,0.06);
+      border-radius: 40px;
+      border: 1px solid rgba(255,140,66,0.12);
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.08s;
+    }
+    #target-zone {
+      position: absolute;
+      top: 0; height: 100%;
+      background: rgba(255,200,80,0.22);
+      border-left: 2px solid rgba(255,190,50,0.65);
+      border-right: 2px solid rgba(255,190,50,0.65);
+      border-radius: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      transition: width 0.35s ease;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .fish-icon {
+      font-size: 22px;
+      opacity: 0.55;
+      pointer-events: none;
+    }
+    /* 猫バー */
+    #bar {
+      position: absolute;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 42px;
+      line-height: 1;
+      background: none;
+      pointer-events: none;
+      transition: filter 0.05s;
+      filter: drop-shadow(0 0 8px #ff8c42);
+    }
+
+    /* ── Beat dots ── */
+    #beat-dots { display: flex; gap: 10px; margin-top: 20px; }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+      transition: background 0.05s, transform 0.05s, box-shadow 0.05s;
+    }
+    .dot.kick  { background: #ff8c42; transform: scale(1.6); box-shadow: 0 0 8px #ff8c42; }
+    .dot.hihat { background: #ff6b9d; transform: scale(1.3); box-shadow: 0 0 6px #ff6b9d; }
+
+    /* ── Tap button ── */
+    #tap-btn {
+      margin-top: 44px;
+      width: 150px; height: 150px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 40% 35%, #2a1208, #160806);
+      border: 2.5px solid rgba(255,140,66,0.5);
+      color: #fff;
+      font-size: 40px;
+      cursor: pointer;
+      outline: none;
+      box-shadow: 0 0 28px rgba(255,140,66,0.25), inset 0 0 20px rgba(255,140,66,0.06);
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.08s, box-shadow 0.08s;
+    }
+    #tap-btn:active, #tap-btn.pressed {
+      transform: scale(0.92);
+      box-shadow: 0 0 50px rgba(255,140,66,0.7), inset 0 0 30px rgba(255,140,66,0.2);
+    }
+
+    /* ── Feedback ── */
+    #feedback {
+      position: absolute;
+      top: 44%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 44px;
+      font-weight: bold;
+      pointer-events: none;
+      opacity: 0;
+      letter-spacing: 3px;
+      transition: opacity 0.15s, transform 0.15s;
+      white-space: nowrap;
+    }
+
+    /* ── Canvas / Flash ── */
+    #particles { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+    #flash     { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 4; transition: opacity 0.25s; }
+
+    /* ══════════════════════════════════════
+       START SCREEN
+    ══════════════════════════════════════ */
+    #start-screen {
+      position: fixed; inset: 0;
+      background: #1a0a08;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 14px; z-index: 100;
+    }
+    #start-screen h1 {
+      font-size: 80px; color: #fff;
+      letter-spacing: 8px;
+      text-shadow: 0 0 40px #ff8c42, 0 0 80px rgba(255,140,66,0.3);
+      animation: pulse-title 2s ease-in-out infinite;
+    }
+    @keyframes pulse-title {
+      0%,100% { text-shadow: 0 0 40px #ff8c42, 0 0 80px rgba(255,140,66,0.3); }
+      50%      { text-shadow: 0 0 60px #ff8c42, 0 0 120px rgba(255,140,66,0.5); }
+    }
+    #start-screen p { color: #7a5040; font-size: 17px; text-align: center; line-height: 2; }
+    #start-screen em { color: #ff8c42; font-style: normal; font-weight: bold; }
+
+    /* Ranking on start screen */
+    #start-ranking {
+      width: 260px;
+      background: rgba(255,140,66,0.05);
+      border: 1px solid rgba(255,140,66,0.1);
+      border-radius: 12px;
+      padding: 12px 20px;
+    }
+    #start-ranking h3 {
+      font-size: 11px; letter-spacing: 4px; color: #5a3020;
+      text-align: center; margin-bottom: 10px;
+    }
+    .rank-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 4px 0;
+      font-size: 15px; color: #8a6050;
+    }
+    .rank-num { width: 22px; text-align: right; color: #5a3020; font-size: 13px; }
+    .rank-num.gold   { color: #ffd700; font-weight: bold; }
+    .rank-num.silver { color: #c0c0c0; font-weight: bold; }
+    .rank-num.bronze { color: #cd7f32; font-weight: bold; }
+    .rank-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rank-score { color: #fff; font-weight: bold; letter-spacing: 1px; }
+
+    #start-btn {
+      margin-top: 6px;
+      padding: 16px 52px;
+      background: linear-gradient(135deg, #ff8c42, #ff5e9e);
+      border: none; border-radius: 40px;
+      color: #fff; font-size: 22px;
+      font-weight: bold; letter-spacing: 3px;
+      cursor: pointer;
+      box-shadow: 0 0 30px rgba(255,140,66,0.5);
+      transition: transform 0.1s;
+    }
+    #start-btn:active { transform: scale(0.95); }
+
+    /* ══════════════════════════════════════
+       GAME OVER SCREEN
+    ══════════════════════════════════════ */
+    #gameover-screen {
+      position: fixed; inset: 0;
+      background: rgba(26,10,8,0.96);
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 14px; z-index: 100;
+      overflow-y: auto; padding: 20px 0;
+    }
+    #gameover-screen h2 {
+      font-size: 52px; color: #ff8c42;
+      text-shadow: 0 0 30px #ff8c42;
+      letter-spacing: 4px;
+    }
+    #final-score-label { color: #5a3020; font-size: 12px; letter-spacing: 4px; }
+    #final-score { font-size: 80px; font-weight: bold; color: #fff; line-height: 1; }
+
+    /* Name entry */
+    #name-entry {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      width: 280px;
+      background: rgba(255,215,0,0.05);
+      border: 1px solid rgba(255,215,0,0.25);
+      border-radius: 14px;
+      padding: 16px 20px;
+    }
+    #name-entry p { color: #ffd700; font-size: 14px; letter-spacing: 2px; }
+    #name-input {
+      width: 100%; padding: 10px 14px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 8px;
+      color: #fff; font-size: 18px;
+      text-align: center; outline: none;
+      letter-spacing: 2px;
+    }
+    #name-input:focus { border-color: rgba(255,140,66,0.6); }
+    #submit-name-btn {
+      padding: 10px 32px;
+      background: linear-gradient(135deg, #ffd700, #ff8800);
+      border: none; border-radius: 30px;
+      color: #1a0a08; font-size: 16px;
+      font-weight: bold; letter-spacing: 2px;
+      cursor: pointer;
+    }
+
+    /* Ranking on gameover */
+    #gameover-ranking { width: 260px; }
+    #gameover-ranking h3 {
+      font-size: 11px; letter-spacing: 4px; color: #5a3020;
+      text-align: center; margin-bottom: 10px;
+    }
+
+    #retry-btn {
+      padding: 16px 52px;
+      background: linear-gradient(135deg, #ff8c42, #ff5e9e);
+      border: none; border-radius: 40px;
+      color: #fff; font-size: 22px;
+      font-weight: bold; letter-spacing: 3px;
+      cursor: pointer;
+      box-shadow: 0 0 30px rgba(255,140,66,0.5);
+    }
+    #retry-btn:active { transform: scale(0.95); }
+  </style>
+</head>
+<body>
+
+<canvas id="particles"></canvas>
+<div id="flash"></div>
+
+<!-- ══ Start Screen ══ -->
+<div id="start-screen">
+  <h1>ニャッ！</h1>
+  <p>🐟 に向かって走る 🐱 を<br><em>ど真ん中</em>で止めてニャッ！</p>
+  <div id="start-ranking">
+    <h3>ランキング</h3>
+    <div id="start-rank-list"></div>
+  </div>
+  <button id="start-btn" onclick="startGame()">にゃ！スタート</button>
+</div>
+
+<!-- ══ Game Over Screen ══ -->
+<div id="gameover-screen">
+  <h2>にゃーん…😿</h2>
+  <div id="final-score-label">スコア</div>
+  <div id="final-score">0</div>
+
+  <div id="name-entry">
+    <p>🏆 TOP 3 ランクイン！</p>
+    <input id="name-input" type="text" maxlength="8" placeholder="なまえを入力" autocomplete="off">
+    <button id="submit-name-btn" onclick="submitName()">登 録</button>
+  </div>
+
+  <div id="gameover-ranking">
+    <h3>ランキング</h3>
+    <div id="gameover-rank-list"></div>
+  </div>
+
+  <button id="retry-btn" onclick="restartGame()">もっかい！</button>
+</div>
+
+<!-- ══ Game ══ -->
+<div id="game-container">
+  <div id="score-area">
+    <div id="combo-display"></div>
+    <div id="score">0</div>
+    <div id="pts-popup"></div>
+  </div>
+
+  <div id="zone-bar-wrap">
+    <div id="zone-label">ZONE</div>
+    <div id="zone-bar-bg"><div id="zone-bar-fill"></div></div>
+  </div>
+
+  <div id="track-wrap">
+    <div id="track">
+      <div id="target-zone"><span class="fish-icon">🐟</span></div>
+      <div id="bar">🐱</div>
+    </div>
+  </div>
+
+  <div id="beat-dots">
+    <div class="dot" id="d0"></div>
+    <div class="dot" id="d1"></div>
+    <div class="dot" id="d2"></div>
+    <div class="dot" id="d3"></div>
+  </div>
+
+  <button id="tap-btn" onclick="onTap()">🐾</button>
+  <div id="feedback"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// AUDIO — 猫サウンド
+// ═══════════════════════════════════════════
+let AC = null;
+function initAudio() { AC = new (window.AudioContext || window.webkitAudioContext)(); }
+
+// ── ビートサウンド（ポップで可愛い）──
+function playPawBeat() {
+  if (!AC) return;
+  const t = AC.currentTime;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(320, t);
+  o.frequency.exponentialRampToValueAtTime(130, t + 0.14);
+  g.gain.setValueAtTime(0.45, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+  o.connect(g); g.connect(AC.destination);
+  o.start(t); o.stop(t + 0.2);
+}
+function playJingle() {
+  if (!AC) return;
+  const t = AC.currentTime;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(1400, t);
+  o.frequency.exponentialRampToValueAtTime(900, t + 0.06);
+  g.gain.setValueAtTime(0.12, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+  o.connect(g); g.connect(AC.destination);
+  o.start(t); o.stop(t + 0.1);
+}
+function playMidBeat() {
+  if (!AC) return;
+  const t = AC.currentTime;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(210, t);
+  o.frequency.exponentialRampToValueAtTime(95, t + 0.12);
+  g.gain.setValueAtTime(0.3, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+  o.connect(g); g.connect(AC.destination);
+  o.start(t); o.stop(t + 0.15);
+}
+
+// ── にゃ〜♪ 成功音 ──
+function playMeowSuccess(perfect) {
+  if (!AC) return;
+  const t = AC.currentTime;
+  const notes = perfect ? [0, 0.1, 0.2] : [0, 0.12];
+  const baseFreqs = perfect ? [520, 680, 820] : [500, 660];
+
+  notes.forEach((delay, i) => {
+    const o = AC.createOscillator(), g = AC.createGain();
+    const f = AC.createBiquadFilter();
+    o.type = 'sawtooth';
+    const bf = baseFreqs[i];
+    o.frequency.setValueAtTime(bf, t + delay);
+    o.frequency.linearRampToValueAtTime(bf * 1.4, t + delay + 0.07);
+    o.frequency.exponentialRampToValueAtTime(bf * 0.82, t + delay + 0.22);
+    f.type = 'bandpass';
+    f.frequency.value = perfect ? 1600 : 1200;
+    f.Q.value = 2.5;
+    g.gain.setValueAtTime(0, t + delay);
+    g.gain.linearRampToValueAtTime(0.28, t + delay + 0.02);
+    g.gain.setValueAtTime(0.28, t + delay + 0.1);
+    g.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.3);
+    o.connect(f); f.connect(g); g.connect(AC.destination);
+    o.start(t + delay); o.stop(t + delay + 0.35);
+  });
+}
+
+// ── にゃーん… ミス音 ──
+function playMeowMiss() {
+  if (!AC) return;
+  const t = AC.currentTime;
+  const o = AC.createOscillator(), g = AC.createGain();
+  const f = AC.createBiquadFilter();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(620, t);
+  o.frequency.linearRampToValueAtTime(700, t + 0.08);
+  o.frequency.exponentialRampToValueAtTime(180, t + 0.65);
+  f.type = 'bandpass';
+  f.frequency.value = 900;
+  f.Q.value = 2;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(0.38, t + 0.04);
+  g.gain.setValueAtTime(0.38, t + 0.15);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+  o.connect(f); f.connect(g); g.connect(AC.destination);
+  o.start(t); o.stop(t + 0.75);
+}
+
+// ═══════════════════════════════════════════
+// PARTICLES — 暖色
+// ═══════════════════════════════════════════
+const cvs = document.getElementById('particles');
+const cx  = cvs.getContext('2d');
+let parts = [];
+function resizeCvs() { cvs.width = innerWidth; cvs.height = innerHeight; }
+resizeCvs(); window.addEventListener('resize', resizeCvs);
+
+const PART_COLORS_PERFECT = ['#ff8c42','#ffd700','#ffb347','#ff6b9d','#fff'];
+const PART_COLORS_GOOD    = ['#ffb347','#ffd700','#ff9966'];
+
+function spawnParts(x, y, colors, n = 22) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, sp = Math.random() * 9 + 2;
+    parts.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 2,
+      life: 1, decay: Math.random()*0.04+0.025,
+      size: Math.random()*5+2,
+      color: colors[Math.floor(Math.random()*colors.length)] });
+  }
+}
+function drawParts() {
+  cx.clearRect(0, 0, cvs.width, cvs.height);
+  parts = parts.filter(p => p.life > 0);
+  for (const p of parts) {
+    p.x += p.vx; p.y += p.vy; p.vy += 0.25; p.life -= p.decay;
+    cx.globalAlpha = p.life;
+    cx.fillStyle = p.color;
+    cx.beginPath(); cx.arc(p.x, p.y, p.size, 0, Math.PI*2); cx.fill();
+  }
+  cx.globalAlpha = 1;
+}
+
+// ═══════════════════════════════════════════
+// RANKING
+// ═══════════════════════════════════════════
+const RANK_KEY = 'nyatRanking3';
+
+function loadRanking() {
+  try { return JSON.parse(localStorage.getItem(RANK_KEY)) || []; }
+  catch { return []; }
+}
+function saveRanking(list) { localStorage.setItem(RANK_KEY, JSON.stringify(list)); }
+function isTop3(score) {
+  if (score <= 0) return false;
+  const list = loadRanking();
+  return list.length < 3 || score > list[list.length - 1].score;
+}
+function insertRanking(name, score) {
+  const list = loadRanking();
+  list.push({ name: name || '---', score });
+  list.sort((a, b) => b.score - a.score);
+  const trimmed = list.slice(0, 3);
+  saveRanking(trimmed);
+  return trimmed;
+}
+
+const MEDALS = ['gold', 'silver', 'bronze'];
+const MEDAL_CHARS = ['1', '2', '3'];
+
+function renderRanking(containerId) {
+  const list = loadRanking();
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  for (let i = 0; i < 3; i++) {
+    const row = document.createElement('div');
+    row.className = 'rank-row';
+    const entry = list[i];
+    row.innerHTML = `
+      <span class="rank-num ${MEDALS[i]}">${MEDAL_CHARS[i]}</span>
+      <span class="rank-name">${entry ? entry.name : '---'}</span>
+      <span class="rank-score">${entry ? entry.score.toLocaleString() : '---'}</span>
+    `;
+    el.appendChild(row);
+  }
+}
+
+// ═══════════════════════════════════════════
+// GAME STATE
+// ═══════════════════════════════════════════
+const BPM            = 128;
+const BEAT_MS        = 60000 / BPM;
+const BEATS_PER_BAR  = 4;
+const TARGET_START   = 0.55;
+const TARGET_MIN     = 0.06;
+const SHRINK_PER_HIT = 0.006;
+const BAR_SPEED_START = 0.35;
+const BAR_SPEED_MAX   = 1.80;
+const SPEED_PER_HIT   = 0.012;
+
+let score = 0, combo = 0, maxCombo = 0;
+let gameActive = false;
+let beatIdx = 0, beatTimer = null, rafId = null, startTime = 0;
+let targetSize = TARGET_START;
+let barSpeed = BAR_SPEED_START;
+let currentBarPos = 0.5;
+let pendingScore = null;
+
+const PATTERN = [0, 1, 2, 1]; // pawbeat/jingle/midbeat/jingle
+
+function calcPoints(perfect) {
+  const base = Math.round(30 / targetSize);
+  const multiplier = perfect ? 1.5 : 1.0;
+  let pts = Math.round(base * multiplier);
+  if (combo >= 10) pts = Math.round(pts * 2.0);
+  else if (combo >= 5) pts = Math.round(pts * 1.5);
+  return pts;
+}
+
+// ═══════════════════════════════════════════
+// BEAT
+// ═══════════════════════════════════════════
+function onBeat() {
+  if (!gameActive) return;
+  const type = PATTERN[beatIdx % BEATS_PER_BAR];
+  if (type === 0) playPawBeat();
+  else if (type === 2) playMidBeat();
+  else playJingle();
+
+  const dots = document.querySelectorAll('.dot');
+  dots.forEach(d => { d.className = 'dot'; });
+  const active = document.getElementById('d' + (beatIdx % 4));
+  active.classList.add(type === 0 || type === 2 ? 'kick' : 'hihat');
+  setTimeout(() => active.className = 'dot', 200);
+
+  if (type === 0 || type === 2) {
+    const t = document.getElementById('track');
+    t.style.borderColor = type === 0 ? 'rgba(255,140,66,0.6)' : 'rgba(255,107,157,0.55)';
+    setTimeout(() => t.style.borderColor = 'rgba(255,140,66,0.12)', 120);
+  }
+  beatIdx++;
+}
+
+// ═══════════════════════════════════════════
+// GAME LOOP
+// ═══════════════════════════════════════════
+function loop(ts) {
+  if (!gameActive) return;
+  const elapsed = ts - startTime;
+  currentBarPos = 0.5 + 0.5 * Math.sin((elapsed / BEAT_MS) * Math.PI * barSpeed);
+
+  const track = document.getElementById('track');
+  const bar   = document.getElementById('bar');
+  bar.style.left = (currentBarPos * track.offsetWidth) + 'px';
+
+  // 中央に近いほど明るくグロー
+  const proximity = 1 - Math.abs(currentBarPos - 0.5) * 2;
+  const glow = 4 + proximity * 22;
+  bar.style.filter = `drop-shadow(0 0 ${glow}px #ff8c42) drop-shadow(0 0 ${glow*1.5}px #ffd700)`;
+
+  drawParts();
+  rafId = requestAnimationFrame(loop);
+}
+
+// ═══════════════════════════════════════════
+// TAP
+// ═══════════════════════════════════════════
+function onTap() {
+  if (!gameActive) return;
+  const btn = document.getElementById('tap-btn');
+  btn.classList.add('pressed');
+  setTimeout(() => btn.classList.remove('pressed'), 120);
+
+  const dist = Math.abs(currentBarPos - 0.5);
+  const half = targetSize / 2;
+
+  if (dist <= half * 0.28) {
+    hit('にゃっ！！', '#ff8c42', true);
+  } else if (dist <= half) {
+    hit('いいね🐱', '#ffd700', false);
+  } else {
+    miss();
+  }
+}
+
+function hit(label, color, perfect) {
+  combo++;
+  if (combo > maxCombo) maxCombo = combo;
+
+  const pts = calcPoints(perfect);
+  score += pts;
+
+  targetSize = Math.max(TARGET_MIN, targetSize - SHRINK_PER_HIT);
+  barSpeed   = Math.min(BAR_SPEED_MAX, barSpeed + SPEED_PER_HIT);
+  document.getElementById('target-zone').style.width = (targetSize * 100) + '%';
+  updateZoneBar();
+
+  updateUI(pts);
+  showFeedback(label, color);
+  playMeowSuccess(perfect);
+
+  const track = document.getElementById('track');
+  const rect  = track.getBoundingClientRect();
+  const x = rect.left + currentBarPos * rect.width;
+  const y = rect.top  + rect.height / 2;
+  spawnParts(x, y, perfect ? PART_COLORS_PERFECT : PART_COLORS_GOOD, perfect ? 38 : 20);
+  flash(perfect ? 'rgba(255,140,66,0.13)' : 'rgba(255,215,0,0.09)');
+}
+
+function miss() {
+  playMeowMiss();
+  flash('rgba(255,80,80,0.22)');
+  showFeedback('ニャ！😿', '#ff5566');
+  combo = 0;
+  const gc = document.getElementById('game-container');
+  gc.style.transform = 'translateX(-6px)';
+  setTimeout(() => gc.style.transform = 'translateX(6px)', 80);
+  setTimeout(() => gc.style.transform = '', 160);
+  gameActive = false;
+  setTimeout(gameOver, 650);
+}
+
+// ═══════════════════════════════════════════
+// GAME FLOW
+// ═══════════════════════════════════════════
+function startGame() {
+  document.getElementById('start-screen').style.display = 'none';
+  initAudio();
+  score = 0; combo = 0; maxCombo = 0;
+  targetSize = TARGET_START; barSpeed = BAR_SPEED_START; beatIdx = 0; parts = [];
+  document.getElementById('target-zone').style.width = (targetSize * 100) + '%';
+  updateZoneBar();
+  updateUI(null);
+  gameActive = true;
+  startTime  = performance.now();
+  onBeat();
+  beatTimer = setInterval(onBeat, BEAT_MS);
+  rafId = requestAnimationFrame(loop);
+}
+
+function gameOver() {
+  clearInterval(beatTimer);
+  cancelAnimationFrame(rafId);
+
+  document.getElementById('final-score').textContent = score.toLocaleString();
+
+  const inTop3 = isTop3(score);
+  if (inTop3) {
+    pendingScore = score;
+    const nameEntry = document.getElementById('name-entry');
+    nameEntry.style.display = 'flex';
+    document.getElementById('name-input').value = '';
+    setTimeout(() => document.getElementById('name-input').focus(), 400);
+  } else {
+    pendingScore = null;
+    document.getElementById('name-entry').style.display = 'none';
+  }
+
+  renderRanking('gameover-rank-list');
+
+  setTimeout(() => {
+    document.getElementById('gameover-screen').style.display = 'flex';
+  }, 700);
+}
+
+function submitName() {
+  if (pendingScore === null) return;
+  const name = document.getElementById('name-input').value.trim() || 'ねこ';
+  insertRanking(name, pendingScore);
+  pendingScore = null;
+  document.getElementById('name-entry').style.display = 'none';
+  renderRanking('gameover-rank-list');
+  renderRanking('start-rank-list');
+}
+
+function restartGame() {
+  if (pendingScore !== null) {
+    insertRanking('---', pendingScore);
+    pendingScore = null;
+  }
+  document.getElementById('gameover-screen').style.display = 'none';
+  clearInterval(beatTimer);
+  cancelAnimationFrame(rafId);
+  startGame();
+}
+
+document.getElementById('name-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitName();
+});
+
+// ═══════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════
+function updateUI(pts) {
+  document.getElementById('score').textContent = score.toLocaleString();
+
+  const cd = document.getElementById('combo-display');
+  if (combo >= 3) {
+    cd.textContent = combo + ' COMBO 🐾';
+    cd.style.color = combo >= 10 ? '#ff6b9d' : combo >= 5 ? '#ffd700' : '#ff8c42';
+    cd.style.textShadow = '0 0 12px currentColor';
+  } else {
+    cd.textContent = '';
+  }
+
+  if (pts !== null) {
+    const pp = document.getElementById('pts-popup');
+    pp.textContent = '+' + pts;
+    pp.style.opacity = '1';
+    clearTimeout(pp._timer);
+    pp._timer = setTimeout(() => { pp.style.opacity = '0'; }, 600);
+  }
+}
+
+function updateZoneBar() {
+  const pct = ((targetSize - TARGET_MIN) / (TARGET_START - TARGET_MIN)) * 100;
+  document.getElementById('zone-bar-fill').style.width = Math.max(2, pct) + '%';
+}
+
+let feedbackTimer = null;
+function showFeedback(text, color) {
+  const el = document.getElementById('feedback');
+  el.textContent = text;
+  el.style.color = color;
+  el.style.textShadow = '0 0 20px ' + color;
+  el.style.opacity = '1';
+  el.style.transform = 'translate(-50%, -60%) scale(1.15)';
+  clearTimeout(feedbackTimer);
+  feedbackTimer = setTimeout(() => {
+    el.style.opacity = '0';
+    el.style.transform = 'translate(-50%, -50%) scale(1)';
+  }, 550);
+}
+
+function flash(color) {
+  const f = document.getElementById('flash');
+  f.style.transition = 'none';
+  f.style.background = color;
+  f.style.opacity = '1';
+  setTimeout(() => { f.style.transition = 'opacity 0.3s'; f.style.opacity = '0'; }, 60);
+}
+
+// ─── Service Worker 登録
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js');
+}
+
+// ─── キーボード
+document.addEventListener('keydown', e => {
+  if ((e.code === 'Space' || e.code === 'Enter') && gameActive) {
+    e.preventDefault(); onTap();
+  }
+});
+
+renderRanking('start-rank-list');
+updateZoneBar();
+</script>
+</body>
+</html>
